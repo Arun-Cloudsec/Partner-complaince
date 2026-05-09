@@ -3,7 +3,7 @@ import {
   Upload, Sparkles, ArrowRight, Check, X, AlertTriangle,
   ChevronRight, Download, RotateCcw, Search, Edit3,
   CheckCircle2, Circle, CircleSlash, CircleDot, Loader2, TrendingUp, Sparkle,
-  KeyRound, FileText, Settings, Eye, EyeOff, BookOpen, FileDown, ChevronDown, Filter, Layers, Presentation, ClipboardList, MessageSquare
+  KeyRound, FileText, Settings, Eye, EyeOff, BookOpen, ChevronDown
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -419,7 +419,7 @@ const Header = ({ platform, onPlatformChange, onReset, hasData, onExport, onExpo
                     <FileText size={14} /> Excel (.xlsx)
                   </button>
                   <button onClick={() => { onExportPdf(); setExportOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:opacity-80 border-b" style={{ color: T.ink, borderColor: T.lineSoft }}>
-                    <FileDown size={14} /> PDF (print)
+                    <Download size={14} /> PDF (print)
                   </button>
                   <button onClick={() => { onExportWord(); setExportOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:opacity-80" style={{ color: T.ink }}>
                     <FileText size={14} /> Word (.doc)
@@ -846,7 +846,7 @@ const ReqTable = ({ requirements, onOpen, query, setQuery, filter, setFilter, ca
           <button onClick={() => setShowPartnerDetail(!showPartnerDetail)}
             className="flex items-center gap-2 px-3 py-2 text-sm transition-all"
             style={{ background: showPartnerDetail ? T.navyBg : T.card, border: `1px solid ${showPartnerDetail ? T.navy+"40" : T.line}`, color: showPartnerDetail ? T.navy : T.inkSoft }}>
-            <Layers size={14} /> {showPartnerDetail ? "Hide responses" : "Show responses"}
+            <Search size={14} /> {showPartnerDetail ? "Hide responses" : "Show responses"}
           </button>
         </div>
       </div>
@@ -1338,10 +1338,10 @@ const ExecReportPanel = ({ report, metrics, verdict, platform, onClose, onPdf, o
             </div>
             <div className="flex items-center gap-2">
               <button onClick={onPdf} className="flex items-center gap-2 px-3 py-2 text-xs font-mono" style={{ background: "rgba(255,255,255,.1)", color: T.bg }}>
-                <FileDown size={12} /> PDF
+                <Download size={12} /> PDF
               </button>
               <button onClick={onPptx} className="flex items-center gap-2 px-3 py-2 text-xs font-mono" style={{ background: "rgba(255,255,255,.1)", color: T.bg }}>
-                <Presentation size={12} /> PPT
+                <FileText size={12} /> PPT
               </button>
               <button onClick={onClose} className="p-2 opacity-50 hover:opacity-100"><X size={18} /></button>
             </div>
@@ -1398,7 +1398,7 @@ const ExecReportPanel = ({ report, metrics, verdict, platform, onClose, onPdf, o
           {/* Vendor Queries */}
           <div>
             <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-3" style={{ color: T.inkFade }}>
-              <MessageSquare size={12} className="inline mr-1" /> Recommended Vendor Follow-Up Queries
+              <Search size={12} className="inline mr-1" /> Recommended Vendor Follow-Up Queries
             </div>
             <div style={{ background: T.card, border: `1px solid ${T.line}` }}>
               {(report.vendorQueries || []).map((q, i) => (
@@ -1452,10 +1452,10 @@ const ExecReportPanel = ({ report, metrics, verdict, platform, onClose, onPdf, o
           <span className="font-mono text-[10px]" style={{ color: T.inkFade }}>Vanguard · Compliance Intelligence</span>
           <div className="flex gap-2">
             <button onClick={onPdf} className="flex items-center gap-2 px-4 py-2 text-sm font-medium" style={{ background: T.ink, color: T.bg }}>
-              <FileDown size={14} /> Download PDF
+              <Download size={14} /> Download PDF
             </button>
             <button onClick={onPptx} className="flex items-center gap-2 px-4 py-2 text-sm font-medium" style={{ background: T.card, border: `1px solid ${T.ink}`, color: T.ink }}>
-              <Presentation size={14} /> Download PPT
+              <FileText size={14} /> Download PPT
             </button>
           </div>
         </div>
@@ -1686,7 +1686,7 @@ export default function App() {
                 <button onClick={handleGenerateExecReport} disabled={execLoading}
                   className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-all"
                   style={{ background: T.bg, color: T.ink, opacity: execLoading ? 0.6 : 1 }}>
-                  {execLoading ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : <><ClipboardList size={14} /> {execReport ? "Regenerate" : "Generate Report"}</>}
+                  {execLoading ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : <><Sparkles size={14} /> {execReport ? "Regenerate" : "Generate Report"}</>}
                 </button>
               </div>
             </div>
