@@ -2,7 +2,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import {
   Upload, Sparkles, ArrowRight, Check, X, AlertTriangle,
   ChevronRight, Download, RotateCcw, Search, Edit3,
-  CheckCircle2, Circle, CircleSlash, CircleDot, Loader2, TrendingUp, Sparkle
+  CheckCircle2, Circle, CircleSlash, CircleDot, Loader2, TrendingUp, Sparkle,
+  KeyRound, FileText, Settings, Eye, EyeOff, BookOpen
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -109,18 +110,27 @@ const parseWorkbook = (buf) => {
   return { requirements, workbook: wb, sheetName, headers };
 };
 
-/* ───────────────────────── Claude API call (via server proxy) ───────────────────────── */
-const reviewWithClaude = async (requirements, platform) => {
+/* ───────────────────────── Claude API call (direct or via server proxy) ───────────────────────── */
+const reviewWithClaude = async (requirements, platform, apiKey = "", referenceDoc = "") => {
   const payload = requirements.map(r => ({
     id: r.id, category: r.category, requirement: r.requirement,
     partnerResponse: r.partnerResponse, partnerComment: r.partnerComment || "(no comment)"
   }));
 
-  const prompt = `You are a senior cloud compliance architect specialising in Microsoft Azure, on-premises, and multi-cloud deployments. You are reviewing a partner's responses to a customer compliance questionnaire for a ${platform} deployment.
+  const refSection = referenceDoc
+    ? `\n\nREFERENCE DOCUMENT (use this as the ground truth for comparison):
+The following is an existing compliance document, policy, or standard provided by the customer. Compare the partner's responses against this reference. Flag any contradictions, gaps, or areas where the partner's response does not align with the reference. Note where the partner claims something that the reference document contradicts.
 
+<reference_document>
+${referenceDoc.slice(0, 30000)}
+</reference_document>\n`
+    : "";
+
+  const prompt = `You are a senior cloud compliance architect specialising in Microsoft Azure, on-premises, and multi-cloud deployments. You are reviewing a partner's responses to a customer compliance questionnaire for a ${platform} deployment.
+${refSection}
 For each requirement, assess:
 1. CLARITY — is the partner's response clear and specific, or vague/generic?
-2. ACCURACY — is the partner's compliance claim technically correct given ${platform} capabilities?
+2. ACCURACY — is the partner's compliance claim technically correct given ${platform} capabilities?${referenceDoc ? "\n2b. REFERENCE CHECK — does the response align with or contradict the reference document provided?" : ""}
 3. FEASIBILITY — if marked Non-Compliant or Partial, can this realistically be made fully compliant using ${platform} native services or standard practice?
 4. RECOMMENDED RESPONSE — what should the response actually be, and what improved comment should accompany it (cite specific Azure/on-prem services where relevant)?
 
@@ -143,26 +153,48 @@ Return ONLY a JSON object (no markdown fences, no commentary) with this exact sh
       "accuracy": "accurate" | "incorrect" | "partial",
       "feasibility": "feasible" | "challenging" | "not_feasible",
       "recommendedStatus": "Compliant" | "Partial" | "Non-Compliant",
-      "recommendedComment": "the improved response text, 1-3 sentences, cite specific services",
+      "recommendedComment": "the improved response text, 1-3 sentences, cite specific services${referenceDoc ? ". Note if reference document supports or contradicts this" : ""}",
       "reasoning": "brief internal reasoning for the delivery team, 1-2 sentences",
       "aiFlag": "improved" | "confirmed" | "unclear" | "attention"
     }
   ]
 }`;
 
-  const resp = await fetch("/api/review", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: CLAUDE_MODEL,
-      max_tokens: 8000,
-      messages: [{ role: "user", content: prompt }],
-    }),
-  });
+  let resp;
+  if (apiKey && apiKey.trim()) {
+    // Direct Anthropic API call
+    resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": apiKey.trim(),
+        "anthropic-version": "2023-06-01",
+        "anthropic-dangerous-direct-browser-access": "true",
+      },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 8000,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+  } else {
+    // Server proxy
+    resp = await fetch("/api/review", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: CLAUDE_MODEL,
+        max_tokens: 8000,
+        messages: [{ role: "user", content: prompt }],
+      }),
+    });
+  }
 
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({}));
-    throw new Error(err.error || `Server returned ${resp.status}`);
+    const msg = err.error?.message || err.error || `API returned ${resp.status}`;
+    if (resp.status === 401) throw new Error("Invalid API key. Please check your Anthropic API key and try again.");
+    throw new Error(msg);
   }
 
   const data = await resp.json();
@@ -234,7 +266,10 @@ const exportExcel = (originalWorkbook, sheetName, requirements) => {
 };
 
 /* ───────────────────────── UI: Header ───────────────────────── */
-const Header = ({ platform, onPlatformChange, onReset, hasData, onExport }) => (
+const Header = ({ platform, onPlatformChange, onReset, hasData, onExport, apiKey, onApiKeyChange }) => {
+  const [showKey, setShowKey] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  return (
   <header className="border-b sticky top-0 z-30 backdrop-blur-sm" style={{ borderColor: T.line, background: `${T.bg}E6` }}>
     <div className="max-w-[1400px] mx-auto px-8 py-5 flex items-center justify-between">
       <div className="flex items-baseline gap-4">
@@ -249,6 +284,40 @@ const Header = ({ platform, onPlatformChange, onReset, hasData, onExport }) => (
         </div>
       </div>
       <div className="flex items-center gap-3">
+        {/* API Key toggle */}
+        <div className="relative">
+          <button onClick={() => setSettingsOpen(!settingsOpen)}
+            className="flex items-center gap-2 px-3 py-2 text-sm transition-all"
+            style={{ color: apiKey ? T.emerald : T.inkSoft, background: apiKey ? T.emeraldBg : "transparent", border: `1px solid ${apiKey ? T.emerald+"40" : T.line}` }}>
+            <KeyRound size={14} />
+            <span className="hidden sm:inline">{apiKey ? "API Key ✓" : "API Key"}</span>
+          </button>
+          {settingsOpen && (
+            <div className="absolute right-0 top-full mt-2 w-80 p-4 shadow-lg z-50" style={{ background: T.card, border: `1px solid ${T.line}` }}>
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-3" style={{ color: T.inkFade }}>Anthropic API Key</div>
+              <div className="relative">
+                <input
+                  type={showKey ? "text" : "password"}
+                  value={apiKey}
+                  onChange={e => onApiKeyChange(e.target.value)}
+                  placeholder="sk-ant-api03-..."
+                  className="w-full px-3 py-2 pr-10 text-sm font-mono outline-none"
+                  style={{ background: T.bg, border: `1px solid ${T.line}`, color: T.ink }}
+                />
+                <button onClick={() => setShowKey(!showKey)} className="absolute right-2 top-1/2 -translate-y-1/2" style={{ color: T.inkFade }}>
+                  {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+              </div>
+              <div className="text-[11px] mt-2 leading-relaxed" style={{ color: T.inkFade }}>
+                {apiKey
+                  ? "✓ Key saved. Calls go directly to Anthropic API."
+                  : "Without a key, calls route through the server proxy (/api/review). Enter your key for direct API access."}
+              </div>
+              <button onClick={() => setSettingsOpen(false)} className="mt-3 text-xs font-medium" style={{ color: T.ink }}>Done</button>
+            </div>
+          )}
+        </div>
+
         <div className="flex items-center gap-1 px-1 py-1 text-xs font-mono" style={{ background: T.card, border: `1px solid ${T.line}` }}>
           {["Azure", "On-Premises", "GCP", "Hybrid"].map(p => (
             <button key={p} onClick={() => onPlatformChange(p)}
@@ -273,12 +342,42 @@ const Header = ({ platform, onPlatformChange, onReset, hasData, onExport }) => (
       </div>
     </div>
   </header>
-);
+);};
 
 /* ───────────────────────── UI: Upload view ───────────────────────── */
-const UploadView = ({ onFile, onSample, platform, error }) => {
+const UploadView = ({ onFile, onSample, platform, error, referenceDoc, refDocName, onRefDoc }) => {
   const inputRef = useRef(null);
+  const refInputRef = useRef(null);
   const [drag, setDrag] = useState(false);
+  const [refDrag, setRefDrag] = useState(false);
+
+  const handleRefFile = async (file) => {
+    if (!file) return;
+    const name = file.name;
+    try {
+      if (file.name.endsWith(".txt") || file.name.endsWith(".md") || file.name.endsWith(".csv")) {
+        const text = await file.text();
+        onRefDoc(text, name);
+      } else if (file.name.endsWith(".xlsx") || file.name.endsWith(".xls")) {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array" });
+        const text = wb.SheetNames.map(sn => {
+          const rows = XLSX.utils.sheet_to_json(wb.Sheets[sn], { defval: "", raw: false });
+          return `--- Sheet: ${sn} ---\n` + rows.map(r => Object.entries(r).map(([k,v]) => `${k}: ${v}`).join(" | ")).join("\n");
+        }).join("\n\n");
+        onRefDoc(text, name);
+      } else {
+        // For PDF/DOCX — read as text (basic extraction)
+        const text = await file.text();
+        onRefDoc(text, name);
+      }
+    } catch (e) {
+      console.error("Reference doc read error:", e);
+      // Fallback: try reading as text
+      try { const text = await file.text(); onRefDoc(text, name); } catch { onRefDoc("", ""); }
+    }
+  };
+
   return (
     <div className="max-w-[1400px] mx-auto px-8 py-16">
       <div className="grid grid-cols-12 gap-8">
@@ -314,6 +413,42 @@ const UploadView = ({ onFile, onSample, platform, error }) => {
                 <div className="font-display text-xl" style={{ color: T.ink }}>Drop the questionnaire here</div>
                 <div className="text-sm mt-0.5" style={{ color: T.inkFade }}>Excel (.xlsx, .xls) or CSV · Max 5MB</div>
               </div>
+            </div>
+          </div>
+
+          {/* Reference document upload */}
+          <div
+            onDragOver={e => { e.preventDefault(); setRefDrag(true); }}
+            onDragLeave={() => setRefDrag(false)}
+            onDrop={e => { e.preventDefault(); setRefDrag(false); const f = e.dataTransfer.files[0]; if (f) handleRefFile(f); }}
+            onClick={() => refInputRef.current?.click()}
+            className="cursor-pointer transition-all p-6 mb-4"
+            style={{
+              border: `1px dashed ${refDrag ? T.navy : referenceDoc ? T.emerald+"60" : T.lineSoft}`,
+              background: referenceDoc ? T.emeraldBg+"40" : refDrag ? T.navyBg+"40" : "transparent",
+            }}>
+            <input ref={refInputRef} type="file" accept=".xlsx,.xls,.csv,.txt,.md,.pdf,.docx"
+              onChange={e => e.target.files[0] && handleRefFile(e.target.files[0])} className="hidden" />
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 flex items-center justify-center" style={{ background: referenceDoc ? T.emerald : T.navyBg, color: referenceDoc ? T.bg : T.navy }}>
+                <BookOpen size={18} strokeWidth={1.5} />
+              </div>
+              <div className="flex-1">
+                <div className="text-sm font-medium" style={{ color: T.ink }}>
+                  {referenceDoc ? `✓ Reference: ${refDocName}` : "Optional: Upload existing compliance document"}
+                </div>
+                <div className="text-xs mt-0.5" style={{ color: T.inkFade }}>
+                  {referenceDoc
+                    ? `${(referenceDoc.length / 1000).toFixed(0)}K chars loaded · AI will compare responses against this`
+                    : "Upload a policy, standard, or previous assessment to compare responses against"}
+                </div>
+              </div>
+              {referenceDoc && (
+                <button onClick={(e) => { e.stopPropagation(); onRefDoc("", ""); }}
+                  className="p-1 hover:opacity-70" style={{ color: T.inkFade }}>
+                  <X size={14} />
+                </button>
+              )}
             </div>
           </div>
 
@@ -743,6 +878,15 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [catFilter, setCatFilter] = useState("all");
+  const [apiKey, setApiKey] = useState(() => {
+    try { return localStorage.getItem("vanguard_api_key") || ""; } catch { return ""; }
+  });
+  const [referenceDoc, setReferenceDoc] = useState("");
+  const [refDocName, setRefDocName] = useState("");
+
+  useEffect(() => {
+    try { if (apiKey) localStorage.setItem("vanguard_api_key", apiKey); else localStorage.removeItem("vanguard_api_key"); } catch {}
+  }, [apiKey]);
 
   const runReview = async (reqs, wb, sn) => {
     setView("analysing");
@@ -750,7 +894,7 @@ export default function App() {
       setStep("Parsing questionnaire…");
       await new Promise(r => setTimeout(r, 300));
       setStep("Cross-referencing Azure service capabilities…");
-      const result = await reviewWithClaude(reqs, platform);
+      const result = await reviewWithClaude(reqs, platform, apiKey, referenceDoc);
       setStep("Composing verdict…");
       const merged = reqs.map(r => {
         const review = result.reviews.find(x => String(x.id) === String(r.id));
@@ -850,9 +994,9 @@ export default function App() {
 
   return (
     <div className="font-body min-h-screen grain" style={{ background: T.bg, color: T.ink }}>
-      <Header platform={platform} onPlatformChange={setPlatform} onReset={handleReset} hasData={view === "dashboard"} onExport={handleExport} />
+      <Header platform={platform} onPlatformChange={setPlatform} onReset={handleReset} hasData={view === "dashboard"} onExport={handleExport} apiKey={apiKey} onApiKeyChange={setApiKey} />
 
-      {view === "upload"    && <UploadView onFile={handleFile} onSample={handleSample} platform={platform} error={error} />}
+      {view === "upload"    && <UploadView onFile={handleFile} onSample={handleSample} platform={platform} error={error} referenceDoc={referenceDoc} refDocName={refDocName} onRefDoc={(text, name) => { setReferenceDoc(text); setRefDocName(name); }} />}
       {view === "analysing" && <AnalysingView step={step} total={requirements.length || 24} platform={platform} />}
 
       {view === "dashboard" && verdict && (
