@@ -3,7 +3,7 @@ import {
   Upload, Sparkles, ArrowRight, Check, X, AlertTriangle,
   ChevronRight, Download, RotateCcw, Search, Edit3,
   CheckCircle2, Circle, CircleSlash, CircleDot, Loader2, TrendingUp, Sparkle,
-  KeyRound, FileText, Settings, Eye, EyeOff, BookOpen
+  KeyRound, FileText, Settings, Eye, EyeOff, BookOpen, FileDown, ChevronDown, Filter, Layers, Presentation, ClipboardList, MessageSquare
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -265,10 +265,89 @@ const exportExcel = (originalWorkbook, sheetName, requirements) => {
   URL.revokeObjectURL(url);
 };
 
+
+
+/* ───────────────────────── Export as formatted text (PDF/Word via HTML) ───────────────────────── */
+const exportFormatted = (requirements, verdict, metrics, format = "pdf") => {
+  const finalStatus = (r) => r.finalStatus || r.aiRecommendedStatus || r.partnerResponse;
+  const finalComment = (r) => r.finalComment || r.aiRecommendedComment || r.partnerComment;
+  const meta = { can_be_compliant: "Can Be Compliant", mostly_compliant: "Mostly Compliant", challenging: "Challenging" };
+
+  const rows = requirements.map(r => `
+    <tr>
+      <td style="padding:8px;border:1px solid #ddd;font-family:monospace;font-size:12px">${r.id}</td>
+      <td style="padding:8px;border:1px solid #ddd;font-size:12px">${r.category}</td>
+      <td style="padding:8px;border:1px solid #ddd;font-size:12px">${r.requirement}</td>
+      <td style="padding:8px;border:1px solid #ddd;font-size:12px;font-weight:600;color:${r.partnerResponse==='Compliant'?'#2D5F3F':r.partnerResponse==='Non-Compliant'?'#8B2C1A':'#B8731F'}">${r.partnerResponse}</td>
+      <td style="padding:8px;border:1px solid #ddd;font-size:11px;color:#5A544A">${r.partnerComment || '—'}</td>
+      <td style="padding:8px;border:1px solid #ddd;font-size:12px;font-weight:600;color:${finalStatus(r)==='Compliant'?'#2D5F3F':finalStatus(r)==='Non-Compliant'?'#8B2C1A':'#B8731F'}">${finalStatus(r)}</td>
+      <td style="padding:8px;border:1px solid #ddd;font-size:11px;color:#5A544A">${finalComment(r)}</td>
+      <td style="padding:8px;border:1px solid #ddd;font-size:11px;color:#5A544A">${r.aiReasoning || '—'}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Compliance Review Report</title>
+    <style>body{font-family:'Segoe UI',Arial,sans-serif;margin:40px;color:#14120F}h1{font-size:28px;margin-bottom:4px}h2{font-size:20px;margin-top:32px;border-bottom:2px solid #14120F;padding-bottom:8px}
+    .kpi{display:inline-block;margin-right:32px;margin-bottom:16px}.kpi-val{font-size:36px;font-weight:700}.kpi-lab{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#5A544A}
+    table{width:100%;border-collapse:collapse;margin-top:16px}th{background:#14120F;color:#F7F3EA;padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:1px;text-align:left;border:1px solid #14120F}</style></head>
+    <body>
+    <h1>Compliance Review Report</h1>
+    <p style="color:#5A544A;font-size:14px">Generated ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"long",year:"numeric"})} · Vanguard Compliance Intelligence</p>
+    <hr style="border:none;border-top:1px solid #E3DCC9;margin:20px 0">
+
+    <h2>Verdict: ${meta[verdict?.verdict] || 'Review Complete'}</h2>
+    <p style="font-size:16px;line-height:1.6">${verdict?.verdictHeadline || ''}</p>
+    <p style="color:#5A544A">${verdict?.verdictDetail || ''}</p>
+
+    <h2>Summary Metrics</h2>
+    <div>
+      <div class="kpi"><div class="kpi-val">${metrics.total}</div><div class="kpi-lab">Total Requirements</div></div>
+      <div class="kpi"><div class="kpi-val">${metrics.partner.compliant}</div><div class="kpi-lab">Partner: Compliant</div></div>
+      <div class="kpi"><div class="kpi-val">${metrics.ai.compliant}</div><div class="kpi-lab">After AI: Compliant</div></div>
+      <div class="kpi"><div class="kpi-val">${metrics.improved}</div><div class="kpi-lab">AI Improved</div></div>
+      <div class="kpi"><div class="kpi-val">${metrics.needsAttention}</div><div class="kpi-lab">Needs Attention</div></div>
+    </div>
+
+    <h2>Before vs After AI Review</h2>
+    <table>
+      <tr><th>Status</th><th>Partner (Before)</th><th>After AI Review</th><th>Change</th></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd">Compliant</td><td style="padding:8px;border:1px solid #ddd;color:#2D5F3F;font-weight:700">${metrics.partner.compliant}</td><td style="padding:8px;border:1px solid #ddd;color:#2D5F3F;font-weight:700">${metrics.ai.compliant}</td><td style="padding:8px;border:1px solid #ddd;color:#2D5F3F">${metrics.ai.compliant - metrics.partner.compliant >= 0 ? '+' : ''}${metrics.ai.compliant - metrics.partner.compliant}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd">Partial</td><td style="padding:8px;border:1px solid #ddd;color:#B8731F">${metrics.partner.partial}</td><td style="padding:8px;border:1px solid #ddd;color:#B8731F">${metrics.ai.partial}</td><td style="padding:8px;border:1px solid #ddd">${metrics.ai.partial - metrics.partner.partial >= 0 ? '+' : ''}${metrics.ai.partial - metrics.partner.partial}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd">Non-Compliant</td><td style="padding:8px;border:1px solid #ddd;color:#8B2C1A">${metrics.partner.nonCompliant}</td><td style="padding:8px;border:1px solid #ddd;color:#8B2C1A">${metrics.ai.nonCompliant}</td><td style="padding:8px;border:1px solid #ddd;color:#2D5F3F">${metrics.ai.nonCompliant - metrics.partner.nonCompliant >= 0 ? '+' : ''}${metrics.ai.nonCompliant - metrics.partner.nonCompliant}</td></tr>
+      <tr><td style="padding:8px;border:1px solid #ddd">Not Responded</td><td style="padding:8px;border:1px solid #ddd;color:#8A8175">${metrics.partner.notResponded}</td><td style="padding:8px;border:1px solid #ddd;color:#8A8175">${metrics.ai.notResponded}</td><td style="padding:8px;border:1px solid #ddd">${metrics.ai.notResponded - metrics.partner.notResponded >= 0 ? '+' : ''}${metrics.ai.notResponded - metrics.partner.notResponded}</td></tr>
+    </table>
+
+    <h2>Detailed Review — All ${metrics.total} Requirements</h2>
+    <table>
+      <tr><th>ID</th><th>Category</th><th>Requirement</th><th>Partner Status</th><th>Partner Comment</th><th>AI Status</th><th>AI Comment</th><th>AI Reasoning</th></tr>
+      ${rows}
+    </table>
+
+    <hr style="border:none;border-top:1px solid #E3DCC9;margin:32px 0 16px">
+    <p style="font-size:11px;color:#8A8175">Vanguard · Compliance Intelligence · Powered by Claude</p>
+    </body></html>`;
+
+  if (format === "pdf") {
+    const printWin = window.open('', '_blank');
+    printWin.document.write(html);
+    printWin.document.close();
+    setTimeout(() => { printWin.print(); }, 500);
+  } else {
+    // Word .doc (HTML-based)
+    const blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `compliance-review-${new Date().toISOString().split("T")[0]}.doc`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+};
+
 /* ───────────────────────── UI: Header ───────────────────────── */
-const Header = ({ platform, onPlatformChange, onReset, hasData, onExport, apiKey, onApiKeyChange }) => {
+const Header = ({ platform, onPlatformChange, onReset, hasData, onExport, onExportPdf, onExportWord, apiKey, onApiKeyChange }) => {
   const [showKey, setShowKey] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   return (
   <header className="border-b sticky top-0 z-30 backdrop-blur-sm" style={{ borderColor: T.line, background: `${T.bg}E6` }}>
     <div className="max-w-[1400px] mx-auto px-8 py-5 flex items-center justify-between">
@@ -329,10 +408,25 @@ const Header = ({ platform, onPlatformChange, onReset, hasData, onExport, apiKey
         </div>
         {hasData && (
           <>
-            <button onClick={onExport} className="flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all hover:opacity-80"
-              style={{ background: T.ink, color: T.bg }}>
-              <Download size={14} /> Export Excel
-            </button>
+            <div className="relative">
+              <button onClick={() => setExportOpen(!exportOpen)} className="flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all hover:opacity-80"
+                style={{ background: T.ink, color: T.bg }}>
+                <Download size={14} /> Export <ChevronDown size={12} />
+              </button>
+              {exportOpen && (
+                <div className="absolute right-0 top-full mt-1 w-48 shadow-lg z-50" style={{ background: T.card, border: `1px solid ${T.line}` }}>
+                  <button onClick={() => { onExport(); setExportOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:opacity-80 border-b" style={{ color: T.ink, borderColor: T.lineSoft }}>
+                    <FileText size={14} /> Excel (.xlsx)
+                  </button>
+                  <button onClick={() => { onExportPdf(); setExportOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:opacity-80 border-b" style={{ color: T.ink, borderColor: T.lineSoft }}>
+                    <FileDown size={14} /> PDF (print)
+                  </button>
+                  <button onClick={() => { onExportWord(); setExportOpen(false); }} className="w-full flex items-center gap-3 px-4 py-3 text-sm text-left hover:opacity-80" style={{ color: T.ink }}>
+                    <FileText size={14} /> Word (.doc)
+                  </button>
+                </div>
+              )}
+            </div>
             <button onClick={onReset} className="flex items-center gap-2 px-3 py-2 text-sm"
               style={{ color: T.inkSoft }}>
               <RotateCcw size={14} />
@@ -620,45 +714,66 @@ const ComparisonChart = ({ metrics }) => {
   );
 };
 
-/* ───────────────────────── UI: Donut ───────────────────────── */
+/* ───────────────────────── UI: Before / After Donut pair ───────────────────────── */
+const MiniDonut = ({ data, pct, label }) => (
+  <div className="flex flex-col items-center">
+    <div className="relative">
+      <ResponsiveContainer width={130} height={130}>
+        <PieChart>
+          <Pie data={data} dataKey="value" innerRadius={40} outerRadius={58} paddingAngle={1} stroke="none">
+            {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+          </Pie>
+        </PieChart>
+      </ResponsiveContainer>
+      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+        <div className="font-display text-2xl" style={{ color: T.ink, fontWeight: 400 }}>{pct}%</div>
+      </div>
+    </div>
+    <div className="font-mono text-[9px] uppercase tracking-wider mt-1" style={{ color: T.inkFade }}>{label}</div>
+  </div>
+);
+
 const ComplianceDonut = ({ metrics }) => {
-  const total = metrics.ai.compliant + metrics.ai.partial + metrics.ai.nonCompliant + metrics.ai.notResponded;
-  const data = [
-    { name: "Compliant",     value: metrics.ai.compliant,     fill: T.emerald },
-    { name: "Partial",       value: metrics.ai.partial,       fill: T.amber },
-    { name: "Non-Compliant", value: metrics.ai.nonCompliant,  fill: T.rust },
-    { name: "Not Responded", value: metrics.ai.notResponded,  fill: T.inkFade },
+  const total = metrics.total || 1;
+  const makeData = (src) => [
+    { name: "Compliant",     value: src.compliant,     fill: T.emerald },
+    { name: "Partial",       value: src.partial,       fill: T.amber },
+    { name: "Non-Compliant", value: src.nonCompliant,  fill: T.rust },
+    { name: "Not Responded", value: src.notResponded,  fill: T.inkFade },
   ].filter(d => d.value > 0);
-  const compliancePct = total ? Math.round((metrics.ai.compliant / total) * 100) : 0;
+
+  const partnerData = makeData(metrics.partner);
+  const aiData = makeData(metrics.ai);
+  const partnerPct = Math.round((metrics.partner.compliant / total) * 100);
+  const aiPct = Math.round((metrics.ai.compliant / total) * 100);
+  const uplift = aiPct - partnerPct;
+
   return (
     <div className="p-6 relative" style={{ background: T.card, border: `1px solid ${T.line}` }}>
-      <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-1" style={{ color: T.inkFade }}>Post-review</div>
-      <h3 className="font-display text-2xl mb-4" style={{ color: T.ink, fontWeight: 500 }}>Final compliance</h3>
-      <div className="flex items-center gap-6">
-        <div className="relative flex-shrink-0">
-          <ResponsiveContainer width={180} height={180}>
-            <PieChart>
-              <Pie data={data} dataKey="value" innerRadius={58} outerRadius={82} paddingAngle={1} stroke="none">
-                {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
-              </Pie>
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-            <div className="font-display text-3xl" style={{ color: T.ink, fontWeight: 400 }}>{compliancePct}%</div>
-            <div className="font-mono text-[9px] uppercase tracking-wider" style={{ color: T.inkFade }}>Compliant</div>
-          </div>
+      <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-1" style={{ color: T.inkFade }}>Compliance comparison</div>
+      <h3 className="font-display text-2xl mb-5" style={{ color: T.ink, fontWeight: 500 }}>Before → After AI</h3>
+      <div className="flex items-center justify-around gap-2">
+        <MiniDonut data={partnerData} pct={partnerPct} label="Partner" />
+        <div className="flex flex-col items-center gap-1">
+          <ArrowRight size={20} style={{ color: T.inkFade }} />
+          {uplift > 0 && <div className="font-mono text-xs font-bold" style={{ color: T.emerald }}>+{uplift}%</div>}
         </div>
-        <div className="flex-1 space-y-2">
-          {data.map(d => (
-            <div key={d.name} className="flex items-center justify-between text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-2.5 h-2.5" style={{ background: d.fill }} />
-                <span style={{ color: T.inkSoft }}>{d.name}</span>
-              </div>
-              <span className="font-mono" style={{ color: T.ink }}>{d.value}</span>
+        <MiniDonut data={aiData} pct={aiPct} label="After AI" />
+      </div>
+      <div className="mt-4 pt-4 border-t space-y-1.5" style={{ borderColor: T.lineSoft }}>
+        {makeData(metrics.ai).map(d => (
+          <div key={d.name} className="flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2" style={{ background: d.fill }} />
+              <span style={{ color: T.inkSoft }}>{d.name}</span>
             </div>
-          ))}
-        </div>
+            <div className="flex items-center gap-3 font-mono">
+              <span style={{ color: T.inkFade }}>{metrics.partner[d.name === "Non-Compliant" ? "nonCompliant" : d.name === "Not Responded" ? "notResponded" : d.name.toLowerCase()]}</span>
+              <span style={{ color: T.inkFade }}>→</span>
+              <span style={{ color: T.ink }}>{d.value}</span>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -695,6 +810,7 @@ const FlagPill = ({ flag }) => {
 
 /* ───────────────────────── UI: Requirements table ───────────────────────── */
 const ReqTable = ({ requirements, onOpen, query, setQuery, filter, setFilter, catFilter, setCatFilter, categories }) => {
+  const [showPartnerDetail, setShowPartnerDetail] = useState(false);
   return (
     <div className="fade-in">
       <div className="flex items-baseline justify-between mb-5 flex-wrap gap-4">
@@ -727,6 +843,11 @@ const ReqTable = ({ requirements, onOpen, query, setQuery, filter, setFilter, ca
             <option value="Non-Compliant">Non-Compliant</option>
             <option value="Not Responded">Not Responded</option>
           </select>
+          <button onClick={() => setShowPartnerDetail(!showPartnerDetail)}
+            className="flex items-center gap-2 px-3 py-2 text-sm transition-all"
+            style={{ background: showPartnerDetail ? T.navyBg : T.card, border: `1px solid ${showPartnerDetail ? T.navy+"40" : T.line}`, color: showPartnerDetail ? T.navy : T.inkSoft }}>
+            <Layers size={14} /> {showPartnerDetail ? "Hide responses" : "Show responses"}
+          </button>
         </div>
       </div>
 
@@ -743,19 +864,34 @@ const ReqTable = ({ requirements, onOpen, query, setQuery, filter, setFilter, ca
         {requirements.length === 0 ? (
           <div className="p-10 text-center text-sm" style={{ color: T.inkFade }}>No requirements match your filter.</div>
         ) : requirements.map((r) => (
-          <button key={r.id} onClick={() => onOpen(r)}
-            className="w-full grid grid-cols-[80px_1.5fr_2.5fr_120px_140px_140px_30px] gap-4 px-5 py-4 items-start text-left transition-colors border-b"
-            style={{ borderColor: T.lineSoft, background: "transparent" }}
-            onMouseEnter={e => e.currentTarget.style.background = T.lineSoft}
-            onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-            <div className="font-mono text-xs pt-0.5" style={{ color: T.ink }}>{r.id}</div>
-            <div className="text-xs font-mono uppercase tracking-wider pt-1" style={{ color: T.inkSoft }}>{r.category}</div>
-            <div className="text-sm leading-snug" style={{ color: T.ink }}>{r.requirement}</div>
-            <div><StatusPill status={r.partnerResponse} /></div>
-            <div><StatusPill status={r.finalStatus || r.aiRecommendedStatus || r.partnerResponse} /></div>
-            <div>{r.aiFlag && <FlagPill flag={r.aiFlag} />}</div>
-            <div className="pt-1"><ChevronRight size={16} style={{ color: T.inkFade }} /></div>
-          </button>
+          <div key={r.id} className="border-b" style={{ borderColor: T.lineSoft }}>
+            <button onClick={() => onOpen(r)}
+              className="w-full grid grid-cols-[80px_1.5fr_2.5fr_120px_140px_140px_30px] gap-4 px-5 py-4 items-start text-left transition-colors"
+              style={{ background: "transparent" }}
+              onMouseEnter={e => e.currentTarget.style.background = T.lineSoft}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <div className="font-mono text-xs pt-0.5" style={{ color: T.ink }}>{r.id}</div>
+              <div className="text-xs font-mono uppercase tracking-wider pt-1" style={{ color: T.inkSoft }}>{r.category}</div>
+              <div className="text-sm leading-snug" style={{ color: T.ink }}>{r.requirement}</div>
+              <div><StatusPill status={r.partnerResponse} /></div>
+              <div><StatusPill status={r.finalStatus || r.aiRecommendedStatus || r.partnerResponse} /></div>
+              <div>{r.aiFlag && <FlagPill flag={r.aiFlag} />}</div>
+              <div className="pt-1"><ChevronRight size={16} style={{ color: T.inkFade }} /></div>
+            </button>
+            {showPartnerDetail && (
+              <div className="px-5 pb-4 grid grid-cols-2 gap-3" style={{ background: T.lineSoft + "60" }}>
+                <div className="p-3" style={{ background: T.card, border: `1px solid ${T.line}` }}>
+                  <div className="font-mono text-[9px] uppercase tracking-wider mb-1" style={{ color: T.inkFade }}>Partner said</div>
+                  <div className="text-xs leading-relaxed" style={{ color: r.partnerComment ? T.inkSoft : T.inkFade, fontStyle: r.partnerComment ? "normal" : "italic" }}>{r.partnerComment || "(no comment)"}</div>
+                </div>
+                <div className="p-3" style={{ background: "#FBF7EC", border: `1px solid ${T.line}` }}>
+                  <div className="font-mono text-[9px] uppercase tracking-wider mb-1 flex items-center gap-1" style={{ color: T.inkFade }}><Sparkles size={8} /> AI recommends</div>
+                  <div className="text-xs leading-relaxed" style={{ color: T.ink }}>{r.aiRecommendedComment || r.partnerComment || "—"}</div>
+                  {r.aiReasoning && <div className="text-[10px] mt-2 pt-2 border-t leading-relaxed" style={{ color: T.inkFade, borderColor: T.lineSoft }}>{r.aiReasoning}</div>}
+                </div>
+              </div>
+            )}
+          </div>
         ))}
       </div>
     </div>
@@ -864,6 +1000,470 @@ const DetailPanel = ({ req, onClose, onUpdate }) => {
   );
 };
 
+
+
+/* ───────────────────────── Executive Report Generator ───────────────────────── */
+const generateExecReport = async (requirements, verdict, metrics, platform, apiKey, referenceDoc, refDocName) => {
+  const finalStatus = (r) => r.finalStatus || r.aiRecommendedStatus || r.partnerResponse;
+  const improved = requirements.filter(r => r.aiFlag === "improved");
+  const attention = requirements.filter(r => r.aiFlag === "attention" || r.aiFlag === "unclear");
+  const nonCompliant = requirements.filter(r => finalStatus(r) === "Non-Compliant");
+  const categories = [...new Set(requirements.map(r => r.category))];
+  const catSummary = categories.map(cat => {
+    const items = requirements.filter(r => r.category === cat);
+    return { category: cat, total: items.length,
+      compliant: items.filter(r => finalStatus(r) === "Compliant").length,
+      partial: items.filter(r => finalStatus(r) === "Partial").length,
+      nonCompliant: items.filter(r => finalStatus(r) === "Non-Compliant").length };
+  });
+
+  const prompt = `You are a senior compliance consultant preparing an executive summary report for leadership. Based on the compliance review data below, generate a structured executive report.
+
+ENGAGEMENT CONTEXT:
+- Platform: ${platform}
+- Total requirements reviewed: ${metrics.total}
+- Reference document provided: ${refDocName ? `Yes — "${refDocName}"` : "No"}
+- Date: ${new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" })}
+
+COMPLIANCE SCORES:
+- Partner (before AI review): ${metrics.partner.compliant} compliant, ${metrics.partner.partial} partial, ${metrics.partner.nonCompliant} non-compliant, ${metrics.partner.notResponded} not responded out of ${metrics.total}
+- After AI review: ${metrics.ai.compliant} compliant, ${metrics.ai.partial} partial, ${metrics.ai.nonCompliant} non-compliant, ${metrics.ai.notResponded} not responded
+- AI confidence: ${verdict?.confidence || "N/A"}%
+- AI verdict: ${verdict?.verdict || "N/A"}
+
+CATEGORY BREAKDOWN:
+${JSON.stringify(catSummary, null, 2)}
+
+AI-IMPROVED ITEMS (${improved.length}):
+${improved.slice(0, 10).map(r => `- ${r.id} (${r.category}): ${r.partnerResponse} → ${finalStatus(r)}. Reason: ${r.aiReasoning}`).join("\n")}
+
+ITEMS NEEDING ATTENTION (${attention.length}):
+${attention.slice(0, 10).map(r => `- ${r.id} (${r.category}): "${r.requirement}" — ${r.aiReasoning}`).join("\n")}
+
+REMAINING NON-COMPLIANT (${nonCompliant.length}):
+${nonCompliant.map(r => `- ${r.id} (${r.category}): "${r.requirement}" — ${r.aiReasoning || r.partnerComment}`).join("\n")}
+
+${refDocName ? `REFERENCE DOCUMENT: "${refDocName}" was provided as a baseline for comparison.` : ""}
+
+Return ONLY a JSON object with this exact structure:
+{
+  "title": "Executive Compliance Assessment Report",
+  "subtitle": "one-line subtitle describing the engagement",
+  "executiveSummary": "3-4 paragraph executive summary covering scope, findings, and recommendation (each paragraph separated by \\n\\n)",
+  "scopeOfEngagement": "2-3 paragraphs describing what was assessed, how, and the methodology",
+  "vendorOverview": "2-3 paragraphs on the vendor/partner's overall response quality, strengths, and gaps",
+  "complianceScoreAnalysis": {
+    "beforeSummary": "1-2 sentences on the partner's initial compliance position",
+    "afterSummary": "1-2 sentences on the post-AI-review position",
+    "upliftNarrative": "2-3 sentences explaining what changed and why"
+  },
+  "keyAreasAddressed": [
+    { "area": "area name", "detail": "2-3 sentences on what AI identified and improved", "impact": "high" | "medium" | "low" }
+  ],
+  "remainingRisks": [
+    { "risk": "risk title", "detail": "2-3 sentences", "severity": "critical" | "high" | "medium", "recommendation": "specific recommendation" }
+  ],
+  "vendorQueries": [
+    { "id": 1, "category": "category", "question": "specific question to ask the vendor", "context": "why this is needed", "priority": "high" | "medium" | "low" }
+  ],
+  "supportingDocuments": "paragraph about the reference documents reviewed and how they were used in the assessment",
+  "recommendations": ["recommendation 1", "recommendation 2", "recommendation 3", "recommendation 4", "recommendation 5"],
+  "nextSteps": ["step 1", "step 2", "step 3"]
+}`;
+
+  const body = { model: CLAUDE_MODEL, max_tokens: 8000, messages: [{ role: "user", content: prompt }] };
+  let resp;
+  if (apiKey && apiKey.trim()) {
+    resp = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey.trim(), "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" },
+      body: JSON.stringify(body),
+    });
+  } else {
+    resp = await fetch("/api/review", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  }
+  if (!resp.ok) { const err = await resp.json().catch(() => ({})); throw new Error(err.error?.message || `API error ${resp.status}`); }
+  const data = await resp.json();
+  const text = (data.content || []).filter(c => c.type === "text").map(c => c.text).join("\n");
+  const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+  return JSON.parse(cleaned);
+};
+
+/* ───────────────────────── Build Executive PDF ───────────────────────── */
+const buildExecPDF = (report, metrics, verdict, platform) => {
+  const d = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+  const partnerPct = metrics.total ? Math.round((metrics.partner.compliant / metrics.total) * 100) : 0;
+  const aiPct = metrics.total ? Math.round((metrics.ai.compliant / metrics.total) * 100) : 0;
+
+  const areasHTML = (report.keyAreasAddressed || []).map((a, i) => `
+    <div style="padding:12px 16px;border-left:3px solid ${a.impact==='high'?'#2D5F3F':a.impact==='medium'?'#B8731F':'#5A544A'};margin-bottom:10px;background:#FDFBF5">
+      <div style="font-weight:600;margin-bottom:4px">${i+1}. ${a.area} <span style="font-size:10px;padding:2px 8px;background:${a.impact==='high'?'#E3EDE2':a.impact==='medium'?'#F5E7CF':'#EEE8D8'};color:${a.impact==='high'?'#2D5F3F':'#5A544A'};text-transform:uppercase;letter-spacing:1px;margin-left:8px">${a.impact}</span></div>
+      <div style="font-size:13px;color:#5A544A">${a.detail}</div>
+    </div>`).join('');
+
+  const risksHTML = (report.remainingRisks || []).map(r => `
+    <tr>
+      <td style="padding:10px;border:1px solid #E3DCC9;font-weight:600">${r.risk}</td>
+      <td style="padding:10px;border:1px solid #E3DCC9;font-size:12px;color:${r.severity==='critical'?'#8B2C1A':'#B8731F'};font-weight:600;text-transform:uppercase">${r.severity}</td>
+      <td style="padding:10px;border:1px solid #E3DCC9;font-size:12px;color:#5A544A">${r.detail}</td>
+      <td style="padding:10px;border:1px solid #E3DCC9;font-size:12px">${r.recommendation}</td>
+    </tr>`).join('');
+
+  const queriesHTML = (report.vendorQueries || []).map(q => `
+    <tr>
+      <td style="padding:8px;border:1px solid #E3DCC9;font-family:monospace;font-size:11px">${q.id}</td>
+      <td style="padding:8px;border:1px solid #E3DCC9;font-size:12px">${q.category}</td>
+      <td style="padding:8px;border:1px solid #E3DCC9;font-size:12px;font-weight:600">${q.question}</td>
+      <td style="padding:8px;border:1px solid #E3DCC9;font-size:11px;color:#5A544A">${q.context}</td>
+      <td style="padding:8px;border:1px solid #E3DCC9;font-size:11px;text-transform:uppercase;color:${q.priority==='high'?'#8B2C1A':'#B8731F'}">${q.priority}</td>
+    </tr>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${report.title}</title>
+    <style>
+      @page{margin:60px 50px;size:A4}
+      body{font-family:'Segoe UI',Arial,sans-serif;color:#14120F;margin:0;padding:50px;line-height:1.7;font-size:14px}
+      .cover{text-align:center;padding:120px 40px 80px;border-bottom:3px solid #14120F;margin-bottom:40px;page-break-after:always}
+      .cover h1{font-size:36px;font-weight:300;margin-bottom:8px;letter-spacing:-1px}
+      .cover .sub{font-size:16px;color:#5A544A;margin-bottom:32px}
+      .cover .meta{font-size:12px;color:#8A8175;text-transform:uppercase;letter-spacing:2px}
+      h2{font-size:22px;font-weight:600;margin-top:40px;margin-bottom:16px;padding-bottom:8px;border-bottom:2px solid #14120F}
+      h3{font-size:16px;font-weight:600;margin-top:24px;margin-bottom:10px;color:#1B3B5F}
+      .kpi-row{display:flex;gap:20px;margin:20px 0 30px}
+      .kpi{flex:1;padding:20px;text-align:center;border:1px solid #E3DCC9;background:#FDFBF5}
+      .kpi-val{font-size:42px;font-weight:700;line-height:1}
+      .kpi-lab{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#8A8175;margin-top:6px}
+      .score-compare{display:flex;gap:24px;margin:20px 0}
+      .score-box{flex:1;padding:20px;border:1px solid #E3DCC9}
+      .score-box.after{background:#FBF7EC;border-color:#14120F}
+      table{width:100%;border-collapse:collapse;margin:12px 0 24px}
+      th{background:#14120F;color:#F7F3EA;padding:10px;font-size:10px;text-transform:uppercase;letter-spacing:1.5px;text-align:left}
+      .rec{padding:8px 0;border-bottom:1px solid #EFE8D6;font-size:13px}
+      .rec::before{content:'→ ';color:#2D5F3F;font-weight:700}
+      .footer{margin-top:60px;padding-top:20px;border-top:1px solid #E3DCC9;font-size:10px;color:#8A8175;text-align:center}
+    </style></head><body>
+    <div class="cover">
+      <div class="meta">Confidential · ${platform} Assessment</div>
+      <h1>${report.title}</h1>
+      <div class="sub">${report.subtitle}</div>
+      <div class="meta">${d} · Vanguard Compliance Intelligence</div>
+      <div style="margin-top:60px">
+        <div style="display:inline-block;padding:16px 32px;background:#14120F;color:#F7F3EA;font-size:36px;font-weight:300">${aiPct}%</div>
+        <div style="font-size:12px;color:#8A8175;margin-top:8px;text-transform:uppercase;letter-spacing:2px">Final Compliance Score</div>
+      </div>
+    </div>
+
+    <h2>1. Executive Summary</h2>
+    ${(report.executiveSummary || '').split('\n\n').map(p => `<p>${p}</p>`).join('')}
+
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-val">${metrics.total}</div><div class="kpi-lab">Requirements</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:#2D5F3F">${partnerPct}%</div><div class="kpi-lab">Partner Score</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:#2D5F3F">${aiPct}%</div><div class="kpi-lab">After AI Score</div></div>
+      <div class="kpi"><div class="kpi-val" style="color:#2D5F3F">+${aiPct - partnerPct}%</div><div class="kpi-lab">Uplift</div></div>
+      <div class="kpi"><div class="kpi-val">${verdict?.confidence || 0}%</div><div class="kpi-lab">AI Confidence</div></div>
+    </div>
+
+    <h2>2. Scope of Engagement</h2>
+    ${(report.scopeOfEngagement || '').split('\n\n').map(p => `<p>${p}</p>`).join('')}
+
+    <h2>3. Vendor Response Overview</h2>
+    ${(report.vendorOverview || '').split('\n\n').map(p => `<p>${p}</p>`).join('')}
+
+    <h2>4. Compliance Score Analysis</h2>
+    <div class="score-compare">
+      <div class="score-box">
+        <h3 style="margin-top:0">Before AI Review</h3>
+        <p style="font-size:13px;color:#5A544A">${report.complianceScoreAnalysis?.beforeSummary || ''}</p>
+        <div style="font-size:48px;font-weight:700;color:#5A544A">${partnerPct}%</div>
+      </div>
+      <div class="score-box after">
+        <h3 style="margin-top:0">After AI Review</h3>
+        <p style="font-size:13px;color:#5A544A">${report.complianceScoreAnalysis?.afterSummary || ''}</p>
+        <div style="font-size:48px;font-weight:700;color:#2D5F3F">${aiPct}%</div>
+      </div>
+    </div>
+    <p>${report.complianceScoreAnalysis?.upliftNarrative || ''}</p>
+
+    <h2>5. Key Areas Addressed by AI</h2>
+    <p style="color:#5A544A;font-size:13px">The AI review identified and addressed the following key areas that represent significant improvements or corrections.</p>
+    ${areasHTML}
+
+    <h2>6. Remaining Risks</h2>
+    <table><tr><th>Risk</th><th>Severity</th><th>Detail</th><th>Recommendation</th></tr>${risksHTML}</table>
+
+    <h2>7. Recommended Vendor Follow-Up Queries</h2>
+    <p style="color:#5A544A;font-size:13px">The following questions should be raised with the vendor to obtain additional information or supporting evidence.</p>
+    <table><tr><th>#</th><th>Category</th><th>Question</th><th>Context</th><th>Priority</th></tr>${queriesHTML}</table>
+
+    <h2>8. Supporting Documents</h2>
+    <p>${report.supportingDocuments || 'No reference documents were provided for this assessment.'}</p>
+
+    <h2>9. Recommendations</h2>
+    ${(report.recommendations || []).map(r => `<div class="rec">${r}</div>`).join('')}
+
+    <h2>10. Next Steps</h2>
+    ${(report.nextSteps || []).map((s, i) => `<div class="rec"><strong>Step ${i+1}:</strong> ${s}</div>`).join('')}
+
+    <div class="footer">
+      <p>Vanguard · Compliance Intelligence · Powered by Claude · ${d}</p>
+      <p>This report is auto-generated and should be reviewed by qualified compliance professionals before distribution.</p>
+    </div>
+  </body></html>`;
+
+  const printWin = window.open('', '_blank');
+  printWin.document.write(html);
+  printWin.document.close();
+  setTimeout(() => printWin.print(), 600);
+};
+
+/* ───────────────────────── Build Executive PPTX (HTML slides) ───────────────────────── */
+const buildExecPPTX = (report, metrics, verdict, platform) => {
+  const d = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" });
+  const partnerPct = metrics.total ? Math.round((metrics.partner.compliant / metrics.total) * 100) : 0;
+  const aiPct = metrics.total ? Math.round((metrics.ai.compliant / metrics.total) * 100) : 0;
+
+  const slide = (content, bg = "#14120F", color = "#F7F3EA") => `
+    <div style="width:960px;height:540px;background:${bg};color:${color};padding:48px 60px;display:flex;flex-direction:column;justify-content:center;page-break-after:always;position:relative;box-sizing:border-box">
+      ${content}
+      <div style="position:absolute;bottom:20px;right:60px;font-size:10px;opacity:.5;font-family:monospace">Vanguard · ${d}</div>
+    </div>`;
+
+  const areasSlides = (report.keyAreasAddressed || []).map((a, i) => slide(`
+    <div style="font-size:11px;text-transform:uppercase;letter-spacing:3px;opacity:.5;margin-bottom:20px">Key Area ${i+1}</div>
+    <div style="font-size:36px;font-weight:300;margin-bottom:16px;line-height:1.2">${a.area}</div>
+    <div style="font-size:15px;line-height:1.8;opacity:.8;max-width:700px">${a.detail}</div>
+    <div style="margin-top:24px;padding:8px 16px;display:inline-block;font-size:11px;text-transform:uppercase;letter-spacing:2px;background:${a.impact==='high'?'#2D5F3F':a.impact==='medium'?'#B8731F':'#5A544A'}">${a.impact} impact</div>
+  `)).join('');
+
+  const queriesSlide = (report.vendorQueries || []).slice(0, 6).map(q => `
+    <div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.1);display:flex;gap:12px;font-size:13px">
+      <span style="opacity:.4;font-family:monospace">${q.id}.</span>
+      <div style="flex:1">
+        <div style="font-weight:600;margin-bottom:3px">${q.question}</div>
+        <div style="opacity:.5;font-size:11px">${q.category} · ${q.priority} priority</div>
+      </div>
+    </div>`).join('');
+
+  const risksSlide = (report.remainingRisks || []).slice(0, 5).map(r => `
+    <div style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,.1);font-size:13px">
+      <div style="font-weight:600;margin-bottom:3px;color:${r.severity==='critical'?'#f06b7a':'#e8a44a'}">${r.risk} — ${r.severity}</div>
+      <div style="opacity:.7;font-size:12px">${r.recommendation}</div>
+    </div>`).join('');
+
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${report.title} - Slides</title>
+    <style>@page{margin:0;size:960px 540px}body{margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif}@media print{div{page-break-inside:avoid}}</style></head><body>
+
+    ${slide(`
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:4px;opacity:.4;margin-bottom:40px">${platform} · Compliance Assessment</div>
+      <div style="font-size:44px;font-weight:300;line-height:1.15;margin-bottom:16px">${report.title}</div>
+      <div style="font-size:16px;opacity:.6">${report.subtitle}</div>
+      <div style="margin-top:40px;font-size:12px;opacity:.4">${d} · Vanguard Compliance Intelligence</div>
+    `)}
+
+    ${slide(`
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:3px;opacity:.5;margin-bottom:24px">Executive Summary</div>
+      <div style="font-size:15px;line-height:1.8;opacity:.85">${(report.executiveSummary || '').split('\n\n')[0] || ''}</div>
+      <div style="font-size:14px;line-height:1.8;opacity:.6;margin-top:16px">${(report.executiveSummary || '').split('\n\n').slice(1).join(' ').slice(0, 300)}${(report.executiveSummary || '').length > 400 ? '…' : ''}</div>
+    `)}
+
+    ${slide(`
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:3px;opacity:.5;margin-bottom:24px">Compliance Scores</div>
+      <div style="display:flex;gap:32px;align-items:center;margin-bottom:24px">
+        <div style="text-align:center">
+          <div style="font-size:72px;font-weight:200;opacity:.5">${partnerPct}%</div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;opacity:.4">Partner Score</div>
+        </div>
+        <div style="font-size:32px;opacity:.3">→</div>
+        <div style="text-align:center">
+          <div style="font-size:72px;font-weight:200;color:#7dcd6e">${aiPct}%</div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;opacity:.4">After AI Review</div>
+        </div>
+        <div style="text-align:center;padding:20px 32px;background:rgba(125,205,110,.15)">
+          <div style="font-size:48px;font-weight:700;color:#7dcd6e">+${aiPct - partnerPct}%</div>
+          <div style="font-size:11px;text-transform:uppercase;letter-spacing:2px;opacity:.6">Uplift</div>
+        </div>
+      </div>
+      <div style="font-size:14px;opacity:.6;line-height:1.6">${report.complianceScoreAnalysis?.upliftNarrative || ''}</div>
+    `)}
+
+    ${areasSlides}
+
+    ${slide(`
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:3px;opacity:.5;margin-bottom:20px">Remaining Risks</div>
+      ${risksSlide}
+    `)}
+
+    ${slide(`
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:3px;opacity:.5;margin-bottom:20px">Vendor Follow-Up Queries</div>
+      ${queriesSlide}
+    `)}
+
+    ${slide(`
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:3px;opacity:.5;margin-bottom:24px">Recommendations & Next Steps</div>
+      ${(report.recommendations || []).slice(0, 5).map((r, i) => `<div style="padding:8px 0;font-size:14px;opacity:.8;border-bottom:1px solid rgba(255,255,255,.08)"><span style="opacity:.4;font-family:monospace;margin-right:12px">${i+1}</span>${r}</div>`).join('')}
+      <div style="margin-top:20px;font-size:11px;text-transform:uppercase;letter-spacing:2px;opacity:.4">Next Steps</div>
+      ${(report.nextSteps || []).slice(0, 3).map((s, i) => `<div style="padding:6px 0;font-size:13px;opacity:.6">→ ${s}</div>`).join('')}
+    `)}
+
+    ${slide(`
+      <div style="text-align:center">
+        <div style="font-size:48px;font-weight:200;margin-bottom:16px">Thank you</div>
+        <div style="font-size:14px;opacity:.5">${report.title}</div>
+        <div style="margin-top:40px;font-size:12px;opacity:.3">Vanguard · Compliance Intelligence · Powered by Claude</div>
+      </div>
+    `)}
+  </body></html>`;
+
+  const printWin = window.open('', '_blank');
+  printWin.document.write(html);
+  printWin.document.close();
+  setTimeout(() => printWin.print(), 600);
+};
+
+/* ───────────────────────── UI: Executive Report Panel ───────────────────────── */
+const ExecReportPanel = ({ report, metrics, verdict, platform, onClose, onPdf, onPptx }) => {
+  if (!report) return null;
+  const partnerPct = metrics.total ? Math.round((metrics.partner.compliant / metrics.total) * 100) : 0;
+  const aiPct = metrics.total ? Math.round((metrics.ai.compliant / metrics.total) * 100) : 0;
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center fade-in overflow-y-auto" style={{ background: "rgba(20,18,15,0.6)" }} onClick={onClose}>
+      <div className="w-full max-w-4xl my-8 mx-4" style={{ background: T.bg }} onClick={e => e.stopPropagation()}>
+        {/* Header */}
+        <div className="p-8 border-b" style={{ borderColor: T.line, background: T.ink, color: T.bg }}>
+          <div className="flex items-start justify-between">
+            <div>
+              <div className="font-mono text-[10px] uppercase tracking-[0.3em] mb-3 opacity-50">{platform} · Executive Report</div>
+              <div className="font-display text-3xl mb-2" style={{ fontWeight: 400 }}>{report.title}</div>
+              <div className="text-sm opacity-60">{report.subtitle}</div>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={onPdf} className="flex items-center gap-2 px-3 py-2 text-xs font-mono" style={{ background: "rgba(255,255,255,.1)", color: T.bg }}>
+                <FileDown size={12} /> PDF
+              </button>
+              <button onClick={onPptx} className="flex items-center gap-2 px-3 py-2 text-xs font-mono" style={{ background: "rgba(255,255,255,.1)", color: T.bg }}>
+                <Presentation size={12} /> PPT
+              </button>
+              <button onClick={onClose} className="p-2 opacity-50 hover:opacity-100"><X size={18} /></button>
+            </div>
+          </div>
+          {/* Score strip */}
+          <div className="flex gap-6 mt-6">
+            <div className="text-center"><div className="font-display text-4xl opacity-50">{partnerPct}%</div><div className="font-mono text-[9px] uppercase tracking-wider opacity-30 mt-1">Partner</div></div>
+            <div className="flex items-center opacity-30">→</div>
+            <div className="text-center"><div className="font-display text-4xl" style={{ color: "#7dcd6e" }}>{aiPct}%</div><div className="font-mono text-[9px] uppercase tracking-wider opacity-30 mt-1">After AI</div></div>
+            <div className="text-center px-4 py-2" style={{ background: "rgba(125,205,110,.15)" }}><div className="font-display text-3xl" style={{ color: "#7dcd6e" }}>+{aiPct - partnerPct}%</div><div className="font-mono text-[9px] uppercase tracking-wider opacity-30 mt-1">Uplift</div></div>
+          </div>
+        </div>
+
+        <div className="p-8 space-y-8">
+          {/* Executive Summary */}
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-2" style={{ color: T.inkFade }}>Executive Summary</div>
+            {(report.executiveSummary || '').split('\n\n').map((p, i) => <p key={i} className="text-sm leading-relaxed mb-3" style={{ color: T.inkSoft }}>{p}</p>)}
+          </div>
+
+          {/* Key Areas */}
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-3" style={{ color: T.inkFade }}>Key Areas Addressed</div>
+            <div className="space-y-3">
+              {(report.keyAreasAddressed || []).map((a, i) => (
+                <div key={i} className="p-4 border-l-3" style={{ background: T.card, borderLeft: `3px solid ${a.impact==='high'?T.emerald:a.impact==='medium'?T.amber:T.inkFade}` }}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="text-sm font-medium" style={{ color: T.ink }}>{a.area}</div>
+                    <span className="font-mono text-[9px] uppercase px-2 py-0.5" style={{ background: a.impact==='high'?T.emeraldBg:T.amberBg, color: a.impact==='high'?T.emerald:T.amber }}>{a.impact}</span>
+                  </div>
+                  <div className="text-xs leading-relaxed" style={{ color: T.inkSoft }}>{a.detail}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Remaining Risks */}
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-3" style={{ color: T.inkFade }}>Remaining Risks</div>
+            <div className="space-y-2">
+              {(report.remainingRisks || []).map((r, i) => (
+                <div key={i} className="p-4" style={{ background: T.card, border: `1px solid ${T.line}` }}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className="text-sm font-medium" style={{ color: r.severity==='critical'?T.rust:T.amber }}>{r.risk}</div>
+                    <span className="font-mono text-[9px] uppercase px-2 py-0.5" style={{ background: r.severity==='critical'?T.rustBg:T.amberBg, color: r.severity==='critical'?T.rust:T.amber }}>{r.severity}</span>
+                  </div>
+                  <div className="text-xs mb-2" style={{ color: T.inkSoft }}>{r.detail}</div>
+                  <div className="text-xs font-medium" style={{ color: T.emerald }}>→ {r.recommendation}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Vendor Queries */}
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-3" style={{ color: T.inkFade }}>
+              <MessageSquare size={12} className="inline mr-1" /> Recommended Vendor Follow-Up Queries
+            </div>
+            <div style={{ background: T.card, border: `1px solid ${T.line}` }}>
+              {(report.vendorQueries || []).map((q, i) => (
+                <div key={i} className="px-5 py-4 border-b flex gap-3" style={{ borderColor: T.lineSoft }}>
+                  <div className="font-mono text-xs pt-0.5" style={{ color: T.inkFade }}>{q.id}</div>
+                  <div className="flex-1">
+                    <div className="text-sm font-medium mb-1" style={{ color: T.ink }}>{q.question}</div>
+                    <div className="text-xs" style={{ color: T.inkSoft }}>{q.context}</div>
+                    <div className="flex gap-3 mt-2 text-[10px] font-mono uppercase tracking-wider">
+                      <span style={{ color: T.inkFade }}>{q.category}</span>
+                      <span style={{ color: q.priority==='high'?T.rust:T.amber }}>{q.priority} priority</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Supporting Documents */}
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-2" style={{ color: T.inkFade }}>Supporting Documents</div>
+            <p className="text-sm leading-relaxed" style={{ color: T.inkSoft }}>{report.supportingDocuments}</p>
+          </div>
+
+          {/* Recommendations */}
+          <div>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-3" style={{ color: T.inkFade }}>Recommendations</div>
+            <div className="space-y-2">
+              {(report.recommendations || []).map((r, i) => (
+                <div key={i} className="flex gap-3 p-3" style={{ background: i%2===0 ? T.card : 'transparent' }}>
+                  <span className="font-mono text-xs" style={{ color: T.emerald }}>→</span>
+                  <span className="text-sm" style={{ color: T.ink }}>{r}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Next Steps */}
+          <div className="p-5" style={{ background: T.ink, color: T.bg }}>
+            <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-3 opacity-50">Next Steps</div>
+            {(report.nextSteps || []).map((s, i) => (
+              <div key={i} className="flex gap-3 py-2 border-b" style={{ borderColor: "rgba(255,255,255,.1)" }}>
+                <span className="font-mono text-xs opacity-40">{i+1}</span>
+                <span className="text-sm opacity-80">{s}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-6 border-t flex items-center justify-between" style={{ borderColor: T.line }}>
+          <span className="font-mono text-[10px]" style={{ color: T.inkFade }}>Vanguard · Compliance Intelligence</span>
+          <div className="flex gap-2">
+            <button onClick={onPdf} className="flex items-center gap-2 px-4 py-2 text-sm font-medium" style={{ background: T.ink, color: T.bg }}>
+              <FileDown size={14} /> Download PDF
+            </button>
+            <button onClick={onPptx} className="flex items-center gap-2 px-4 py-2 text-sm font-medium" style={{ background: T.card, border: `1px solid ${T.ink}`, color: T.ink }}>
+              <Presentation size={14} /> Download PPT
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 /* ───────────────────────── Main App ───────────────────────── */
 export default function App() {
   const [view, setView] = useState("upload");
@@ -883,6 +1483,9 @@ export default function App() {
   });
   const [referenceDoc, setReferenceDoc] = useState("");
   const [refDocName, setRefDocName] = useState("");
+  const [execReport, setExecReport] = useState(null);
+  const [execLoading, setExecLoading] = useState(false);
+  const [showExecReport, setShowExecReport] = useState(false);
 
   useEffect(() => {
     try { if (apiKey) localStorage.setItem("vanguard_api_key", apiKey); else localStorage.removeItem("vanguard_api_key"); } catch {}
@@ -943,6 +1546,20 @@ export default function App() {
     setView("upload"); setRequirements([]); setVerdict(null); setWorkbook(null); setError(""); setQuery(""); setFilter("all"); setCatFilter("all");
   };
 
+  const handleGenerateExecReport = async () => {
+    setExecLoading(true);
+    try {
+      const report = await generateExecReport(requirements, verdict, metrics, platform, apiKey, referenceDoc, refDocName);
+      setExecReport(report);
+      setShowExecReport(true);
+    } catch (e) {
+      console.error(e);
+      setError("Failed to generate executive report: " + e.message);
+    } finally {
+      setExecLoading(false);
+    }
+  };
+
   const handleExport = () => {
     exportExcel(workbook, sheetName, requirements);
   };
@@ -994,7 +1611,7 @@ export default function App() {
 
   return (
     <div className="font-body min-h-screen grain" style={{ background: T.bg, color: T.ink }}>
-      <Header platform={platform} onPlatformChange={setPlatform} onReset={handleReset} hasData={view === "dashboard"} onExport={handleExport} apiKey={apiKey} onApiKeyChange={setApiKey} />
+      <Header platform={platform} onPlatformChange={setPlatform} onReset={handleReset} hasData={view === "dashboard"} onExport={handleExport} onExportPdf={() => exportFormatted(requirements, verdict, metrics, "pdf")} onExportWord={() => exportFormatted(requirements, verdict, metrics, "word")} apiKey={apiKey} onApiKeyChange={setApiKey} />
 
       {view === "upload"    && <UploadView onFile={handleFile} onSample={handleSample} platform={platform} error={error} referenceDoc={referenceDoc} refDocName={refDocName} onRefDoc={(text, name) => { setReferenceDoc(text); setRefDocName(name); }} />}
       {view === "analysing" && <AnalysingView step={step} total={requirements.length || 24} platform={platform} />}
@@ -1003,15 +1620,37 @@ export default function App() {
         <main className="max-w-[1400px] mx-auto px-8 py-10">
           <VerdictBanner verdict={verdict} platform={platform} />
 
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-8">
+          {/* ── Before / After summary strip ── */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+            <div className="p-5" style={{ background: T.card, border: `1px solid ${T.line}` }}>
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-3 flex items-center gap-2" style={{ color: T.inkFade }}>
+                <span className="w-2 h-2 rounded-full" style={{ background: T.inkFade }} /> Before · Partner Compliance Status
+              </div>
+              <div className="grid grid-cols-4 gap-4">
+                <div><div className="font-display text-3xl" style={{ color: T.emerald }}>{metrics.partner.compliant}</div><div className="text-[10px] font-mono mt-1" style={{ color: T.inkFade }}>Compliant</div></div>
+                <div><div className="font-display text-3xl" style={{ color: T.amber }}>{metrics.partner.partial}</div><div className="text-[10px] font-mono mt-1" style={{ color: T.inkFade }}>Partial</div></div>
+                <div><div className="font-display text-3xl" style={{ color: T.rust }}>{metrics.partner.nonCompliant}</div><div className="text-[10px] font-mono mt-1" style={{ color: T.inkFade }}>Non-Compliant</div></div>
+                <div><div className="font-display text-3xl" style={{ color: T.inkFade }}>{metrics.partner.notResponded}</div><div className="text-[10px] font-mono mt-1" style={{ color: T.inkFade }}>Not Responded</div></div>
+              </div>
+            </div>
+            <div className="p-5" style={{ background: "#FBF7EC", border: `1px solid ${T.ink}` }}>
+              <div className="font-mono text-[10px] uppercase tracking-[0.2em] mb-3 flex items-center gap-2" style={{ color: T.ink }}>
+                <Sparkles size={10} /> After · AI-Reviewed Compliance Status
+              </div>
+              <div className="grid grid-cols-4 gap-4">
+                <div><div className="font-display text-3xl" style={{ color: T.emerald }}>{metrics.ai.compliant}</div><div className="text-[10px] font-mono mt-1" style={{ color: T.inkFade }}>Compliant {uplift > 0 ? `(+${uplift})` : ""}</div></div>
+                <div><div className="font-display text-3xl" style={{ color: T.amber }}>{metrics.ai.partial}</div><div className="text-[10px] font-mono mt-1" style={{ color: T.inkFade }}>Partial</div></div>
+                <div><div className="font-display text-3xl" style={{ color: T.rust }}>{metrics.ai.nonCompliant}</div><div className="text-[10px] font-mono mt-1" style={{ color: T.inkFade }}>Non-Compliant</div></div>
+                <div><div className="font-display text-3xl" style={{ color: T.inkFade }}>{metrics.ai.notResponded}</div><div className="text-[10px] font-mono mt-1" style={{ color: T.inkFade }}>Not Responded</div></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
             <MetricCard label="Total requirements" value={metrics.total} big />
             <MetricCard label="Partner responded" value={metrics.responded} sub={`${metrics.notResponded} not responded`} />
-            <MetricCard label="Partner: Compliant" value={metrics.partner.compliant} accent={T.emerald} />
-            <MetricCard label="Partner: Partial / Non" value={metrics.partner.partial + metrics.partner.nonCompliant}
-              sub={`${metrics.partner.partial} partial · ${metrics.partner.nonCompliant} non-compliant`} accent={T.rust} />
-            <MetricCard label="After AI: Compliant" value={metrics.ai.compliant} delta={uplift > 0 ? `+${uplift}` : null} accent={T.ink} />
-            <MetricCard label="AI improved / flagged" value={`${metrics.improved} / ${metrics.needsAttention}`}
-              sub="improved · needs attention" accent={T.navy} />
+            <MetricCard label="AI improved" value={metrics.improved} accent={T.emerald} sub="Items upgraded by AI" />
+            <MetricCard label="Needs attention" value={metrics.needsAttention} accent={T.rust} sub="Unclear or flagged" />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-10">
@@ -1028,6 +1667,31 @@ export default function App() {
             categories={categories}
           />
 
+          {/* ── Executive Report Section ── */}
+          <div className="mt-10 p-6 relative" style={{ background: T.ink, color: T.bg }}>
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="font-mono text-[10px] uppercase tracking-[0.25em] mb-2 opacity-50">AI-Powered</div>
+                <div className="font-display text-2xl" style={{ fontWeight: 400 }}>Executive Report</div>
+                <div className="text-sm opacity-60 mt-1 max-w-lg">Generate a comprehensive executive summary with scope analysis, compliance scoring, risk assessment, vendor follow-up queries, and recommendations — as PDF or presentation slides.</div>
+              </div>
+              <div className="flex items-center gap-3">
+                {execReport && (
+                  <button onClick={() => setShowExecReport(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium"
+                    style={{ background: "rgba(255,255,255,.1)", color: T.bg }}>
+                    <Eye size={14} /> View Report
+                  </button>
+                )}
+                <button onClick={handleGenerateExecReport} disabled={execLoading}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-medium transition-all"
+                  style={{ background: T.bg, color: T.ink, opacity: execLoading ? 0.6 : 1 }}>
+                  {execLoading ? <><Loader2 size={14} className="animate-spin" /> Generating…</> : <><ClipboardList size={14} /> {execReport ? "Regenerate" : "Generate Report"}</>}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <div className="mt-10 pt-6 border-t flex items-center justify-between text-xs font-mono" style={{ borderColor: T.line, color: T.inkFade }}>
             <span>Vanguard · Compliance Intelligence · {new Date().toLocaleDateString("en-GB", { day:"2-digit", month:"short", year:"numeric" })}</span>
             <span>Powered by Claude</span>
@@ -1036,6 +1700,10 @@ export default function App() {
       )}
 
       {openReq && <DetailPanel req={openReq} onClose={() => setOpenReq(null)} onUpdate={updateReq} />}
+      {showExecReport && execReport && <ExecReportPanel report={execReport} metrics={metrics} verdict={verdict} platform={platform}
+        onClose={() => setShowExecReport(false)}
+        onPdf={() => buildExecPDF(execReport, metrics, verdict, platform)}
+        onPptx={() => buildExecPPTX(execReport, metrics, verdict, platform)} />}
     </div>
   );
 }
